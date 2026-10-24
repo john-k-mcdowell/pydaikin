@@ -62,6 +62,7 @@ async def test_daikin_brp084(aresponses, client_session):
                                 {
                                     "pn": "e_3003",
                                     "pch": [
+                                        {"pn": "p_02", "pv": "01"},  # Equipment active
                                         {"pn": "p_1D", "pv": "00"},  # Comfort OFF
                                         {"pn": "p_24", "pv": "00"},  # Econo OFF
                                     ],
@@ -217,6 +218,8 @@ async def test_daikin_brp084(aresponses, client_session):
     assert device.outside_temperature == 17.0  # LE 2-byte decode
     assert device.compressor_temperature == 70.0
     assert device.support_compressor_temperature is True
+    assert device.support_equipment_active is True
+    assert device.equipment_active is True
     assert device.model == 'AMVA17MXTF'
     assert device.outdoor_model == 'AMVA17MXR'
     assert device.values.get('datas') == '100/200/300/400/500/600/700'
@@ -1974,3 +1977,51 @@ def test_indoor_temp_tolerates_missing_sensor(response, expected):
         )
         == expected
     )
+
+
+def _equipment_active_response(raw=None):
+    """Build a minimal dgc_status response holding e_3003/p_02 (omitted if None)."""
+    children = [] if raw is None else [{"pn": "p_02", "pv": raw}]
+    return {
+        "responses": [
+            {
+                "fr": "/dsiot/edge/adr_0100.dgc_status",
+                "pc": {
+                    "pn": "dgc_status",
+                    "pch": [
+                        {"pn": "e_1002", "pch": [{"pn": "e_3003", "pch": children}]}
+                    ],
+                },
+            }
+        ]
+    }
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected", "supported"),
+    [
+        ("01", True, True),
+        ("00", False, True),
+        (None, None, False),  # firmware without the datapoint
+        ("05", None, False),  # unknown value is ignored, not guessed
+    ],
+)
+def test_equipment_active(raw, expected, supported):
+    """e_3003/p_02 is exposed as equipment_active; unknown or missing is None."""
+    device = DaikinBRP084("ip", session=MagicMock())
+    device.values["mode"] = "cool"
+    device._extract_optional_readings(_equipment_active_response(raw))
+    assert device.support_equipment_active is supported
+    assert device.equipment_active is expected
+
+
+def test_equipment_active_follows_updates():
+    """A later reading replaces the earlier one (compressor stops, then restarts)."""
+    device = DaikinBRP084("ip", session=MagicMock())
+    device.values["mode"] = "cool"
+    device._extract_optional_readings(_equipment_active_response("01"))
+    assert device.equipment_active is True
+    device._extract_optional_readings(_equipment_active_response("00"))
+    assert device.equipment_active is False
+    device._extract_optional_readings(_equipment_active_response("01"))
+    assert device.equipment_active is True

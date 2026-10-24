@@ -110,6 +110,10 @@ class DaikinBRP084(Appliance):
         "comfort": E_1002_E_3003_PATH + ["p_1D"],
         # Econo (e_3003/p_24): 00=off, 01=on. Verified live read+write.
         "econo": E_1002_E_3003_PATH + ["p_24"],
+        # Indoor unit "equipment active" flag (e_3003/p_02): 00=idle or off,
+        # 01=actively cooling/heating. Observed on a BRP084 mini split in heat,
+        # cool and fan-only modes; read-only.
+        "equipment_active": E_1002_E_3003_PATH + ["p_02"],
         # Outdoor unit quiet (outdoor e_3002/p_3D): 00=off, 01=on.
         "outdoor_quiet": E_1003_PATH + ["e_3002", "p_3D"],
         # Powerful (outdoor e_3002/p_44): 00=off, 01=on. Verified live
@@ -565,6 +569,15 @@ class DaikinBRP084(Appliance):
                 self.values[key] = self.TRANSLATIONS[key].get(raw, 'off')
             except DaikinException:
                 pass
+
+        # Whether the indoor unit is actively cooling/heating (read-only).
+        try:
+            raw = self.find_value_by_pn(response, *self.get_path("equipment_active"))
+            active = {"00": "off", "01": "on"}.get(raw)
+            if active is not None:
+                self.values["equipment_active"] = active
+        except DaikinException:
+            pass
 
         # Current vertical vane position for the active mode.
         try:

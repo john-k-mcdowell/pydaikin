@@ -202,6 +202,23 @@ def test_support_compressor_frequency(values, expected):
 
 
 @pytest.mark.parametrize(
+    ("values", "supported", "active"),
+    [
+        ({"equipment_active": "on"}, True, True),
+        ({"equipment_active": "off"}, True, False),
+        ({}, False, None),  # adapters that do not report it (e.g. BRP069)
+    ],
+)
+def test_equipment_active(values, supported, active):
+    """Test support_equipment_active and equipment_active properties."""
+    mock_session = MagicMock()
+    device = DaikinBRP069("127.0.0.1", session=mock_session)
+    device.values.update(values)
+    assert device.support_equipment_active is supported
+    assert device.equipment_active is active
+
+
+@pytest.mark.parametrize(
     'values, expected',
     [
         ({'en_filter_sign': '1', 'filter_sign_info': '100'}, True),

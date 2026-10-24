@@ -440,6 +440,24 @@ class Appliance(DaikinPowerMixin):
         return 'cmpfreq' in self.values
 
     @property
+    def support_equipment_active(self) -> bool:
+        """Return True if the device reports whether it is actively cooling/heating."""
+        return "equipment_active" in self.values
+
+    @property
+    def equipment_active(self) -> Optional[bool]:
+        """Return True when the unit is actively cooling/heating, False when idle.
+
+        ``False`` also covers a unit that is off or in fan-only mode, so callers
+        must check power and mode as well. Returns None when the device does not
+        report the flag.
+        """
+        value = self.values.get("equipment_active")
+        if value is None:
+            return None
+        return value == "on"
+
+    @property
     def support_filter_dirty(self) -> bool:
         """Return True if the device supports dirty filter notification and it is turned on."""
         return (
