@@ -2053,3 +2053,60 @@ def test_compressor_frequency_ignores_malformed_values(freq_hex):
 
     assert device.support_compressor_frequency is False
     assert device.compressor_running is True
+
+
+def _indoor_active_response(flag):
+    """Build a response with the indoor e_3003/p_02 equipment-active flag."""
+    return {
+        "responses": [
+            {
+                "fr": "/dsiot/edge/adr_0100.dgc_status",
+                "pc": {
+                    "pn": "dgc_status",
+                    "pch": [
+                        {
+                            "pn": "e_1002",
+                            "pch": [
+                                {"pn": "e_3003", "pch": [{"pn": "p_02", "pv": flag}]}
+                            ],
+                        }
+                    ],
+                },
+            }
+        ]
+    }
+
+
+@pytest.mark.parametrize("flag, running", [("01", True), ("00", False)])
+def test_compressor_running_falls_back_to_equipment_active(flag, running):
+    """Without e_2006, the indoor e_3003/p_02 flag gives the run state."""
+    device = DaikinBRP084("127.0.0.1", session=MagicMock())
+    device.values["mode"] = "hot"
+
+    device._extract_optional_readings(_indoor_active_response(flag))
+
+    assert device.support_compressor_running is True
+    assert device.compressor_running is running
+    assert device.support_compressor_frequency is False
+
+
+def test_compressor_running_prefers_e_2006_over_equipment_active():
+    """e_2006 wins when both datapoints are present."""
+    device = DaikinBRP084("127.0.0.1", session=MagicMock())
+    device.values["mode"] = "hot"
+    response = _outdoor_response({"e_2006": {"p_01": "00", "p_04": "0000"}})
+    response["responses"] += _indoor_active_response("01")["responses"]
+
+    device._extract_optional_readings(response)
+
+    assert device.compressor_running is False
+
+
+def test_compressor_running_ignores_unknown_equipment_active_value():
+    """An unrecognised e_3003/p_02 value is ignored."""
+    device = DaikinBRP084("127.0.0.1", session=MagicMock())
+    device.values["mode"] = "hot"
+
+    device._extract_optional_readings(_indoor_active_response("7F"))
+
+    assert device.support_compressor_running is False

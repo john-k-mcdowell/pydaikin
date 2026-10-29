@@ -121,6 +121,10 @@ class DaikinBRP084(Appliance):
         # the setpoint on an FTXM71 (adapter firmware 3.12.3) and watching which
         # nodes tracked the compressor; not every model exposes e_2006.
         "compressor_running": E_1003_PATH + ["e_2006", "p_01"],
+        # Indoor unit "equipment active" flag (e_3003/p_02): 00=idle or off,
+        # 01=actively cooling/heating. Used as the run state on models that do
+        # not expose e_2006. Read-only.
+        "equipment_active": E_1002_E_3003_PATH + ["p_02"],
         "compressor_frequency": E_1003_PATH + ["e_2006", "p_04"],
         # Outdoor unit sensors (read-only)
         "compressor_temp": E_1003_PATH + ["e_A005", "p_01"],
@@ -556,6 +560,27 @@ class DaikinBRP084(Appliance):
 
         self._register_energy_consumption_history()
 
+    def _extract_compressor_state(self, response):
+        """Read the compressor frequency and run flag."""
+        # Compressor frequency and run flag (outdoor e_2006). Reported as
+        # "cmpfreq" so support_compressor_frequency/compressor_frequency on the
+        # base class start working; consumers use the frequency to tell an
+        # actively modulating unit from an idle one.
+        raw = self._safe_extract(response, *self.get_path("compressor_frequency"))
+        if raw is not None and len(raw) >= 4:
+            try:
+                self.values["cmpfreq"] = str(self.hex_le_to_int(raw[:4]))
+            except ValueError:
+                pass
+
+        # Run flag: the outdoor e_2006 when present, otherwise the indoor unit's
+        # own "equipment active" flag (e_3003/p_02).
+        raw = self._safe_extract(response, *self.get_path("compressor_running"))
+        if raw is None:
+            raw = self._safe_extract(response, *self.get_path("equipment_active"))
+        if raw in ("00", "01"):
+            self.values["compressor_running"] = "1" if raw == "01" else "0"
+
     def _extract_optional_readings(self, response):
         """Extract optional values that not all firmware/models expose.
 
@@ -606,20 +631,7 @@ class DaikinBRP084(Appliance):
         except DaikinException:
             pass
 
-        # Compressor frequency and run flag (outdoor e_2006). Reported as
-        # "cmpfreq" so support_compressor_frequency/compressor_frequency on the
-        # base class start working; consumers use the frequency to tell an
-        # actively modulating unit from an idle one.
-        raw = self._safe_extract(response, *self.get_path("compressor_frequency"))
-        if raw is not None and len(raw) >= 4:
-            try:
-                self.values["cmpfreq"] = str(self.hex_le_to_int(raw[:4]))
-            except ValueError:
-                pass
-
-        raw = self._safe_extract(response, *self.get_path("compressor_running"))
-        if raw is not None:
-            self.values["compressor_running"] = "1" if raw == "01" else "0"
+        self._extract_compressor_state(response)
 
         # Outdoor-unit compressor temperature.
         try:

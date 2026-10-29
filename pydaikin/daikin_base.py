@@ -435,6 +435,16 @@ class Appliance(DaikinPowerMixin):
         return 'adv' in self.values
 
     @property
+    def support_compressor_running(self) -> bool:
+        """Return True if the device reports whether the compressor is running."""
+        return False
+
+    @property
+    def compressor_running(self) -> Optional[bool]:
+        """Return True while the compressor runs, None if not reported."""
+        return None
+
+    @property
     def support_compressor_frequency(self) -> bool:
         """Return True if the device supports compressor frequency."""
         return 'cmpfreq' in self.values
